@@ -1,6 +1,7 @@
 import { useQueryString } from "../hooks/useQueryString";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { postService } from "../services/postService";
+// import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+// import { postService } from "../services/postService";
 import Row from "../components/Row";
 import { IPostData } from "../types/posts.type";
 import { LoadingOutlined } from "@ant-design/icons";
@@ -8,6 +9,9 @@ import { Spin } from "antd";
 import Paginate from "../components/Pagination";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
+import { usePosts } from "../hooks/use-posts";
+import { useDeletePost } from "../hooks/use-delete-post";
+import { postsKeys } from "../constants/postsKeys";
 
 const LIMIT = 10;
 
@@ -17,26 +21,43 @@ const Post = () => {
 
   const queryClient = useQueryClient();
 
-  const { data: posts, isLoading } = useQuery({
-    queryKey: ["posts", page],
-    queryFn: () => postService.getPosts(page, LIMIT),
-    staleTime: 60 * 1000,
-  });
+  // const { data: posts, isLoading } = useQuery({
+  //   queryKey: ["posts", page],
+  //   queryFn: () => postService.getPosts(page, LIMIT),
+  //   staleTime: 60 * 1000,
+  // });
+  const { data, isLoading: isPostsLoading } = usePosts({ page, limit: LIMIT });
+  const { mutate: deletePost, isPending: isDeletePostPending } =
+    useDeletePost();
 
-  const { mutate: deleteMutationPost } = useMutation({
-    mutationFn: (id: number | string) => postService.deletePost(id),
-    onSuccess: () => {
-      toast.success("Xoá bài viết thành công");
-      queryClient.invalidateQueries({ queryKey: ["posts", page], exact: true });
-    },
-  });
+  const posts = data?.data ?? [];
 
-  const totalCountPost = Number(posts?.headers["x-total-count"]) || 0;
+  // const { mutate: deleteMutationPost } = useMutation({
+  //   mutationFn: (id: number | string) => postService.deletePost(id),
+  //   onSuccess: () => {
+  //     toast.success("Xoá bài viết thành công");
+  //     queryClient.invalidateQueries({ queryKey: ["posts", page], exact: true });
+  //   },
+  // });
+
+  const totalCountPost = Number(data?.headers["x-total-count"]) || 0;
   const totalPage = Math.ceil(totalCountPost / LIMIT);
 
   const handleDelete = (id: number) => {
-    deleteMutationPost(id);
+    deletePost(id, {
+      onSuccess: () => {
+        // cập nhật data khi xóa bài viết thành công
+        queryClient.invalidateQueries({
+          queryKey: postsKeys.list({ page, limit: LIMIT }),
+        });
+        toast.success("Xoá bài viết thành công");
+      },
+      onError: () => toast.error("Xoá bài viết thất bại"),
+    });
+    // deleteMutationPost(id);
   };
+
+  const loading = isPostsLoading || isDeletePostPending;
   return (
     <>
       <h1 className="title">Posts</h1>
@@ -56,13 +77,13 @@ const Post = () => {
           </tr>
         </thead>
         <tbody>
-          {isLoading ? (
+          {loading ? (
             <Spin
               className="justify-content-center "
               indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />}
             />
           ) : (
-            posts?.data.map((e: JSX.IntrinsicAttributes & IPostData) => (
+            posts?.map((e: JSX.IntrinsicAttributes & IPostData) => (
               <Row key={e.id} {...e} onClick={() => handleDelete(e.id)} />
             ))
           )}

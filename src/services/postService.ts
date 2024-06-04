@@ -21,6 +21,6 @@ export const postService = {
     return http.put<IPostData>(`${POST_API}/${id}`, post);
   },
   deletePost(id: number | string) {
-    return http.delete<{}>(`${POST_API}/${id}`);
+    return http.delete(`${POST_API}/${id}`);
   },
 };

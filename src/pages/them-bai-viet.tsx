@@ -1,9 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
-import { useMatch, useParams } from "react-router-dom";
-import { postService } from "../services/postService";
+import { useMatch, useNavigate, useParams } from "react-router-dom";
+// import { postService } from "../services/postService";
 import { IPostData } from "../types/posts.type";
 import { toast } from "react-toastify";
+import { useAddPost } from "../hooks/use-add-post";
+import { Post } from "../types/Post";
+import { useUpdatePost } from "../hooks/use-update-post";
+import { postsKeys } from "../constants/postsKeys";
+import { usePost } from "../hooks/use-post";
 
 type FormStateType = Omit<IPostData, "id"> | IPostData;
 
@@ -14,6 +19,7 @@ const initialFormState: FormStateType = {
 };
 
 const AddPost = () => {
+  const navigate = useNavigate();
   const [formState, setFormState] = useState<FormStateType>(initialFormState);
   const addMatch = useMatch("/posts/add");
   const isAddMode = Boolean(addMatch);
@@ -21,60 +27,97 @@ const AddPost = () => {
   const { id } = useParams();
 
   const queryClient = useQueryClient();
-
   const {
-    mutate: addMutationPost,
     data,
-    reset,
-  } = useMutation({
-    mutationFn: (body: FormStateType) => postService.addPost(body),
-  });
+    isLoading: isPostLoading,
+    isError: isPostError,
+    error: postError,
+  } = usePost(Number(id));
+  const { mutate: addPost, isPending: isAddPostPending } = useAddPost();
+  const { mutate: updatePost, isPending: isUpdatePostPending } =
+    useUpdatePost();
 
-  const { data: postData } = useQuery({
-    queryKey: ["post", id],
-    enabled: id !== undefined,
-    queryFn: () => postService.getPost(id as string),
-  });
+  // const {
+  //   mutate: addMutationPost,
+  //   data,
+  //   reset,
+  // } = useMutation({
+  //   mutationFn: (body: FormStateType) => postService.addPost(body),
+  // });
+
+  // const { data: postData } = useQuery({
+  //   queryKey: ["post", id],
+  //   enabled: id !== undefined,
+  //   queryFn: () => postService.getPost(id as string),
+  // });
 
   useEffect(() => {
-    if (postData?.data) {
-      setFormState(postData?.data);
+    if (data?.data) {
+      setFormState(data.data);
     }
-  }, [postData?.data]);
+  }, [data?.data]);
 
-  const { mutate: updateMutatePost } = useMutation({
-    mutationFn: (_) =>
-      postService.updatePost(id as string, formState as IPostData),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["post", id], data);
-    },
-  });
+  // const { mutate: updateMutatePost } = useMutation({
+  //   mutationFn: (_) =>
+  //     postService.updatePost(id as string, formState as IPostData),
+  //   onSuccess: (data) => {
+  //     queryClient.setQueryData(["post", id], data);
+  //   },
+  // });
 
   const handleChange =
     (name: keyof FormStateType) => (e: React.ChangeEvent<HTMLInputElement>) => {
       setFormState((prev) => ({ ...prev, [name]: e.target.value }));
-      if (data) {
-        reset();
-      }
+      // if (data) {
+      //   reset();
+      // }
     };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isAddMode) {
-      addMutationPost(formState, {
+      addPost(formState as Post, {
         onSuccess: () => {
-          setFormState(initialFormState);
+          // cập nhật data khi xóa bài viết thành công
+          queryClient.invalidateQueries({ queryKey: postsKeys.all });
           toast.success("Thêm bài viết thành công!");
         },
+        onError: () => toast.error("Thêm bài viết thất bại"),
       });
+      // addMutationPost(formState, {
+      //   onSuccess: () => {
+      //     setFormState(initialFormState);
+      //     toast.success("Thêm bài viết thành công!");
+      //   },
+      // });
     } else {
-      updateMutatePost(undefined, {
-        onSuccess: () => {
-          toast.success("Update thành công!");
-        },
-      });
+      updatePost(
+        { id: Number(id!), post: formState as Post },
+        {
+          onSuccess: () => {
+            // cập nhật data khi xóa bài viết thành công
+            queryClient.invalidateQueries({ queryKey: postsKeys.all });
+            toast.success("Update thành công!");
+            // điều này là để chuyển đến trang bài viết
+            navigate("/posts");
+          },
+          onError: () => toast.error("Update thất bại"),
+        }
+      );
+      // updateMutatePost(undefined, {
+      //   onSuccess: () => {
+      //     queryClient.invalidateQueries({ queryKey: ["post"] });
+      //     toast.success("Update thành công!");
+      //   },
+      // });
     }
   };
+
+  const loading = isAddPostPending || isUpdatePostPending || isPostLoading;
+
+  if (loading) return <div>Loading...</div>;
+  if (isPostError) return <div>Error: {postError.message}</div>;
+
   return (
     <div>
       <h1>{isAddMode ? "Add" : "Edit"} Post</h1>
